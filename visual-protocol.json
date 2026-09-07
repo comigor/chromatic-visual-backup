@@ -1,0 +1,30 @@
+{
+  "name": "X7V1",
+  "direction": "ROM to receiver through stock video; no return channel",
+  "source_pixels": [160, 144],
+  "cell_pixels": 4,
+  "grid_cells": [40, 36],
+  "payload_cell_rectangle_inclusive": [2, 2, 37, 33],
+  "bit_order": "row-major cells, byte most significant bit first; 1 black, 0 white",
+  "border": "outermost cells black iff (x+y)%2==0; remaining non-payload ring white",
+  "frame_bytes": 144,
+  "byte_order": "little-endian",
+  "fields": [
+    {"offset": 0, "bytes": 4, "name": "magic", "value": "X7V1"},
+    {"offset": 4, "bytes": 1, "name": "type", "values": {"0": "manifest", "1": "data"}},
+    {"offset": 5, "bytes": 1, "name": "payload_length"},
+    {"offset": 6, "bytes": 2, "name": "reserved", "value": 0},
+    {"offset": 8, "bytes": 4, "name": "source_file_crc32"},
+    {"offset": 12, "bytes": 4, "name": "source_file_size"},
+    {"offset": 16, "bytes": 4, "name": "block_number", "manifest_value": 4294967295},
+    {"offset": 20, "bytes": 120, "name": "payload", "unused_bytes": 0},
+    {"offset": 140, "bytes": 4, "name": "frame_crc32", "covers_bytes_inclusive": [0, 139]}
+  ],
+  "crc": {"algorithm": "CRC-32/ISO-HDLC", "reflected_polynomial": "EDB88320", "initial": "FFFFFFFF", "final_xor": "FFFFFFFF", "check_123456789": "CBF43926"},
+  "manifest_payload": "ASCII safe 8.3 basename, 1..12 bytes, no NUL; preserved as display/export name, never used as internal storage path",
+  "data_payload": "120 bytes except exact final remainder; zero-based block; empty files have no data blocks",
+  "max_file_bytes": 16777216,
+  "identity": "manifest filename + file size + source CRC; data associated by size + source CRC, assuming one selected file broadcasts at a time; not collision-proof session identity",
+  "repetition": "manifest before each pass and every 32 data blocks; repeat all blocks until user stops",
+  "receiver": "Latch first valid manifest; reject conflicting manifest; ignore data before manifest or with different size/CRC. Reject invalid frame CRC or invalid layout. Accept out-of-order blocks; identical duplicates ignored, conflicting duplicates fail. Verify complete coverage, exact file length and CRC by reading staged file before exposing verified output. No checksum collision immunity or source save validity guarantee."
+}

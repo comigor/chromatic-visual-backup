@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/untoxa/VGM_player",
+  "commit": "d2c30b2cce92fdbeaf2dba5d71d92f8633c505ff",
+  "files": [
+    "src/pff.c",
+    "include/pff.h",
+    "include/diskio.h"
+  ],
+  "changes": [
+    "GBDK ROM bank 1; portable header for host verification; configuration excludes writes",
+    "Specialized constant FAT32 and CP437 branches to remove compiler unreachable-code warnings; other configurations rejected",
+    "src/x7_disk.c is derived from src/gb/everdrivex/diskio.c and its SPI helpers: added timeouts, command allowlist, SDv2-only initialization, cache correctness and error cleanup"
+  ]
+}
