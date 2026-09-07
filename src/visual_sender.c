@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define PAYLOAD_BYTES 120
+#define PAYLOAD_BYTES VISUAL_PAYLOAD_BYTES
 #define MAX_FILE_SIZE 0x1000000UL /* 16 MiB */
 #define MANIFEST_INTERVAL 32
 
@@ -67,7 +67,7 @@ static void fail_msg(const char *stage, const char *reason) {
 }
 
 static uint32_t frame_crc(const uint8_t *frame) {
-  return checksum_update(0xFFFFFFFFUL, frame, 140);
+  return checksum_update(0xFFFFFFFFUL, frame, VISUAL_CRC_OFFSET);
 }
 
 static void store32(uint8_t *dst, uint32_t value) {
@@ -83,8 +83,6 @@ static void print_name(const char *name, uint8_t width) {
   }
 }
 
-/* Draw one code frame and hold it still; B aborts the transmission.
- * The 36x32 payload cells carry the whole 144-byte frame, MSB first. */
 static void show_code(const uint8_t *frame) {
   visual_grid_show(frame);
   if (joypad() & J_B)
@@ -92,13 +90,13 @@ static void show_code(const uint8_t *frame) {
 }
 
 static void send_manifest(void) {
-  uint8_t frame[144];
+  uint8_t frame[VISUAL_FRAME_BYTES];
   uint32_t name_len = 0;
   memset(frame, 0, sizeof(frame));
   frame[0] = 'X';
   frame[1] = '7';
   frame[2] = 'V';
-  frame[3] = '1';
+  frame[3] = '2';
   frame[4] = FRAME_TYPE_MANIFEST;
   frame[5] = 0;
   store32(&frame[8], transfer_crc);
@@ -111,26 +109,27 @@ static void send_manifest(void) {
     name_len++;
   frame[5] = (uint8_t)name_len;
   memcpy(&frame[20], entry.fname, name_len);
-  store32(&frame[140], frame_crc(frame) ^ 0xFFFFFFFFUL);
+  store32(&frame[VISUAL_CRC_OFFSET], frame_crc(frame) ^ 0xFFFFFFFFUL);
   show_code(frame);
 }
 
-static void send_block_data(const uint8_t *payload, uint8_t payload_len,
+static void send_block_data(const uint8_t *payload, uint16_t payload_len,
                             uint32_t block_number) {
-  uint8_t frame[144];
+  uint8_t frame[VISUAL_FRAME_BYTES];
   memset(frame, 0, sizeof(frame));
   frame[0] = 'X';
   frame[1] = '7';
   frame[2] = 'V';
-  frame[3] = '1';
+  frame[3] = '2';
   frame[4] = FRAME_TYPE_DATA;
-  frame[5] = payload_len;
+  frame[5] = (uint8_t)payload_len;
+  frame[6] = (uint8_t)(payload_len >> 8);
   store32(&frame[8], transfer_crc);
   store32(&frame[12], entry.fsize);
   store32(&frame[16], block_number);
   if (payload_len)
     memcpy(&frame[20], payload, payload_len);
-  store32(&frame[140], frame_crc(frame) ^ 0xFFFFFFFFUL);
+  store32(&frame[VISUAL_CRC_OFFSET], frame_crc(frame) ^ 0xFFFFFFFFUL);
   show_code(frame);
 }
 
@@ -157,7 +156,7 @@ static uint32_t transmit_pass(void) {
       send_manifest();
     if (transmit_aborted)
       break;
-    send_block_data(block, (uint8_t)got, block_number);
+    send_block_data(block, got, block_number);
     total += got;
     block_number++;
   }
@@ -343,8 +342,12 @@ static void send_selected(void) {
 
 void main(void) {
   FRESULT result;
-  if (_cpu == CGB_TYPE)
-    set_default_palette();
+  if (_cpu != CGB_TYPE) {
+    printf("GAME BOY COLOR\nREQUIRED");
+    for (;;)
+      vsync();
+  }
+  set_default_palette();
   printf("X7 VISUAL SENDER\n\nSD FILE BROWSER\nSD V2 / FAT32\nREADABLE FILE "
          "NAMES\n"
          "NO SD DATA WRITES\n\nSTART: MOUNT SD\nPOWER OFF: EXIT");

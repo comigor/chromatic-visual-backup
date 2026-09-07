@@ -71,8 +71,8 @@ public class MainActivity extends Activity {
                      intent.getAction())) {
         if (active != null && active.device != null &&
             !usb.getDeviceList().containsKey(active.device.getDeviceName())) {
-          cancel("USB disconnected. Incomplete transfer discarded; no backup " +
-                 "accepted.");
+          cancel("USB disconnected. Incomplete transfer discarded; no backup "
+                 + "accepted.");
         }
       }
     }
@@ -103,10 +103,10 @@ public class MainActivity extends Activity {
     title.setTextSize(24);
     root.addView(title);
     TextView safety = new TextView(this);
-    safety.setText("Stock USB video only. No firmware loading, cartridge " +
-                   "commands or SD writes.\n"
-                   + "Run the visual ROM and leave its grid looping until " +
-                     "verification finishes.");
+    safety.setText("Stock USB video only. No firmware loading, cartridge "
+                   + "commands or SD writes.\n"
+                   + "Run the visual ROM and leave its grid looping until "
+                   + "verification finishes.");
     root.addView(safety);
     receive = new Button(this);
     receive.setText("Receive stock USB video");
@@ -159,8 +159,8 @@ public class MainActivity extends Activity {
     }
     message("Ready",
             "Both the file and its expected CRC32 arrive through the video.\n"
-                + "A file is accepted only after every block, exact length " +
-                  "and readback CRC match.");
+                + "A file is accepted only after every block, exact length "
+                + "and readback CRC match.");
     buttons();
   }
 
@@ -174,8 +174,8 @@ public class MainActivity extends Activity {
     if (device == null) {
       message("No stock video device",
               "Connect the powered-on Chromatic directly to this phone. "
-                  + "Close other USB video apps, then try again. No USB " +
-                    "commands were sent.");
+                  + "Close other USB video apps, then try again. No USB "
+                  + "commands were sent.");
       return;
     }
     if (usb.hasPermission(device)) {
@@ -263,12 +263,12 @@ public class MainActivity extends Activity {
       this.recording = recording;
     }
 
-    void frame(byte[] luma, int width, int height) {
+    void frame(byte[] yuv, int width, int height) {
       if (cancelled.get() || transfer.verifiedFile() != null) {
         return;
       }
       frames++;
-      VisualFrame decoded = VisualFrame.decode(luma, width, height);
+      VisualFrame decoded = VisualFrame.decode(yuv, width, height);
       if (decoded != null) {
         validFrames++;
         try {
@@ -326,8 +326,8 @@ public class MainActivity extends Activity {
           if (complete == null) {
             failure = "Input ended with " + transfer.receivedBlocks() + "/" +
                       transfer.totalBlocks() + " blocks (" + validFrames +
-                      (" valid frames). No verified backup. Record another " +
-                       "full loop.");
+                      (" valid frames). No verified backup. Record another "
+                       + "full loop.");
           }
         }
       } catch (IOException | RuntimeException | LinkageError e) {
@@ -356,9 +356,9 @@ public class MainActivity extends Activity {
           message("CRC VERIFIED",
                   resultName + " · " + result.length() + " bytes\nCRC32 " +
                       String.format(Locale.ROOT, "%08X", sourceCrc) +
-                      ("\nAll blocks present. Stored bytes match the " +
-                       "transmitted source CRC.\n")
-                      + "Stop the ROM manually, then save the file.");
+                      ("\nAll blocks present. Stored bytes match the "
+                       + "transmitted source CRC.\n") +
+                      "Stop the ROM manually, then save the file.");
         }
         buttons();
       });
@@ -376,7 +376,7 @@ public class MainActivity extends Activity {
       }
       long durationUs = Math.multiplyExact(Long.parseLong(value), 1000L);
       int[] pixels = null;
-      byte[] luminance = null;
+      byte[] yuv = null;
       for (long time = 0; time < durationUs && !job.cancelled.get() &&
                           job.transfer.verifiedFile() == null;
            time += 100000) {
@@ -389,18 +389,20 @@ public class MainActivity extends Activity {
           int size = Math.multiplyExact(frame.getWidth(), frame.getHeight());
           if (pixels == null || pixels.length != size) {
             pixels = new int[size];
-            luminance = new byte[size];
+            yuv = new byte[Math.multiplyExact(size, 3)];
           }
           frame.getPixels(pixels, 0, frame.getWidth(), 0, 0, frame.getWidth(),
                           frame.getHeight());
           for (int i = 0; i < size; i++) {
             int pixel = pixels[i];
-            luminance[i] =
-                (byte)(((pixel >> 16 & 255) * 77 + (pixel >> 8 & 255) * 150 +
-                        (pixel & 255) * 29) >>
-                       8);
+            int r = pixel >> 16 & 255, g = pixel >> 8 & 255, b = pixel & 255;
+            yuv[i * 3] = (byte)(((66 * r + 129 * g + 25 * b + 128) >> 8) + 16);
+            yuv[i * 3 + 1] =
+                (byte)(((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128);
+            yuv[i * 3 + 2] =
+                (byte)(((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
           }
-          job.frame(luminance, frame.getWidth(), frame.getHeight());
+          job.frame(yuv, frame.getWidth(), frame.getHeight());
         } finally {
           frame.recycle();
         }

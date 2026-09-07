@@ -356,9 +356,12 @@ static int parse_packet(frame_parser_t *p, const uint8_t *pkt, size_t len) {
     return 0;
 }
 
-static void extract_y(const uint8_t *frame, uint8_t *dst, int n) {
+static void extract_yuv(const uint8_t *frame, uint8_t *dst, int n) {
     for (int i = 0; i < n; i++) {
-        dst[i] = frame[2 * i];
+        int pair = (i & ~1) * 2;
+        dst[i * 3] = frame[i * 2];
+        dst[i * 3 + 1] = frame[pair + 1];
+        dst[i * 3 + 2] = frame[pair + 3];
     }
 }
 
@@ -436,7 +439,7 @@ static jlong open_capture(JNIEnv *env, jint user_fd) {
         throw_io(env, "no supported USB video streaming interface found");
         goto fail;
     }
-    if (info.frame_w < 1 || info.frame_h < 1 || info.frame_w > 4096 || info.frame_h > 4096
+    if (info.frame_w < 2 || (info.frame_w & 1) || info.frame_h < 1 || info.frame_w > 4096 || info.frame_h > 4096
             || (uint64_t)info.frame_w * info.frame_h * 2 > MAX_FRAME_BYTES) {
         throw_io(env, "unsupported video frame size %dx%d", info.frame_w, info.frame_h);
         goto fail;
@@ -609,7 +612,7 @@ static int emit_frame(JNIEnv *env, run_ctx_t *rc, int width, int height) {
     if (el == NULL) {
         return -1;
     }
-    extract_y(rc->parser.frame, (uint8_t *)el, width * height);
+    extract_yuv(rc->parser.frame, (uint8_t *)el, width * height);
     (*env)->ReleaseByteArrayElements(env, rc->luma, el, 0);
     (*env)->CallVoidMethod(env, rc->listener, rc->mid, rc->luma,
                            (jint)width, (jint)height);
@@ -804,7 +807,7 @@ Java_dev_borges_chromaticproof_StockVideoCapture_nRun(JNIEnv *env, jclass cls,
     rc.listener = listener;
     rc.mid = mid;
     rc.parser.frame_bytes = cap->frame_bytes;
-    rc.luma = (*env)->NewByteArray(env, (jsize)(cap->width * cap->height));
+    rc.luma = (*env)->NewByteArray(env, (jsize)(cap->width * cap->height * 3));
     if (rc.luma != NULL) {
         rc.parser.frame = malloc(cap->frame_bytes);
     }
