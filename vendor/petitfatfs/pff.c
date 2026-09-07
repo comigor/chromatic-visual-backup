@@ -611,13 +611,46 @@ static FRESULT dir_find (
 /* Read an object from the directory                                     */
 /*-----------------------------------------------------------------------*/
 #if PF_USE_DIR
+static uint8_t lfn_checksum(const uint8_t *name)
+{
+    uint8_t sum = 0, i;
+    for (i = 0; i < 11; i++)
+        sum = ((sum & 1) ? 0x80 : 0) + (sum >> 1) + name[i];
+    return sum;
+}
+
+static uint8_t lfn_piece(const uint8_t *dir, char *name, uint8_t ordinal)
+{
+    static const uint8_t offsets[13] = {1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30};
+    uint16_t index = (uint16_t)(ordinal - 1) * 13;
+    uint8_t i, ended = 0;
+    for (i = 0; i < 13; i++, index++) {
+        uint16_t c = ld_word(dir + offsets[i]);
+        if (ended) {
+            if (c != 0xFFFF) return 0;
+        } else if (!c) {
+            if (!(dir[0] & 0x40) || index > 255) return 0;
+            name[index] = 0;
+            ended = 1;
+        } else {
+            if (index >= 255 || c == 0xFFFF || c < 32 || c == '/' || c == '\\') return 0;
+            name[index] = c < 127 ? (char)c : '?';
+        }
+    }
+    if ((dir[0] & 0x40) && !ended) name[index] = 0;
+    return 1;
+}
+
 static FRESULT dir_read (
     DIR *dj,        /* Pointer to the directory object to store read object name */
-    uint8_t *dir        /* 32-byte working buffer */
+    uint8_t *dir,
+    char *long_name
 )
 {
     FRESULT res;
     uint8_t a, c;
+    uint8_t expected = 0, checksum = 0, complete = 0;
+    long_name[0] = 0;
 
 
     res = FR_NO_FILE;
@@ -628,12 +661,38 @@ static FRESULT dir_read (
         c = dir[DIR_Name];
         if (c == 0) { res = FR_NO_FILE; break; }    /* Reached to end of table */
         a = dir[DIR_Attr] & AM_MASK;
-        if (c != 0xE5 && c != '.' && !(a & AM_VOL)) break;  /* Is it a valid entry? */
+        if (c != 0xE5 && a == AM_LFN) {
+            uint8_t ordinal = c & 0x1F;
+            if (c & 0x40) {
+                expected = ordinal;
+                checksum = dir[13];
+                complete = 0;
+                long_name[0] = 0;
+            }
+            if (!(c & 0xA0) && ordinal && ordinal <= 20 && expected == ordinal &&
+                checksum == dir[13] && dir[12] == 0 && ld_word(dir + 26) == 0 &&
+                lfn_piece(dir, long_name, ordinal)) {
+                expected--;
+                complete = expected == 0;
+            } else {
+                expected = complete = 0;
+                long_name[0] = 0;
+            }
+        } else if (c != 0xE5 && c != '.' && !(a & AM_VOL)) {
+            if (!complete || checksum != lfn_checksum(dir)) long_name[0] = 0;
+            break;
+        } else {
+            expected = complete = 0;
+            long_name[0] = 0;
+        }
         res = dir_next(dj);         /* Next entry */
         if (res != FR_OK) break;
     }
 
-    if (res != FR_OK) dj->sect = 0;
+    if (res != FR_OK) {
+        dj->sect = 0;
+        long_name[0] = 0;
+    }
 
     return res;
 }
@@ -722,6 +781,12 @@ static void get_fileinfo (      /* No return code */
         fno->ftime = ld_word(dir+DIR_WrtTime);      /* Time */
     }
     *p = 0;
+    if (!fno->lfname[0]) {
+        for (i = 0; i < sizeof(fno->fname); i++) {
+            fno->lfname[i] = fno->fname[i];
+            if (!fno->fname[i]) break;
+        }
+    }
 }
 #endif /* PF_USE_DIR */
 
@@ -1141,7 +1206,7 @@ FRESULT pf_readdir (
         if (!fno) {
             res = dir_rewind(dj);
         } else {
-            res = dir_read(dj, dir);    /* Get current directory item */
+            res = dir_read(dj, dir, fno->lfname);
             if (res == FR_NO_FILE) res = FR_OK;
             if (res == FR_OK) {             /* A valid entry is found */
                 get_fileinfo(dj, dir, fno); /* Get the object information */

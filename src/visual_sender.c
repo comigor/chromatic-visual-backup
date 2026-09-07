@@ -21,6 +21,7 @@ static FILINFO page_entries[10];
 static uint8_t page_count, page_more, selection;
 static uint16_t page_start;
 static char browser_path[256];
+static char directory_title[256];
 static FILINFO entry;
 static uint8_t block[PAYLOAD_BYTES];
 static char path[sizeof(browser_path) + 13];
@@ -74,6 +75,12 @@ static void store32(uint8_t *dst, uint32_t value) {
   dst[1] = (uint8_t)(value >> 8);
   dst[2] = (uint8_t)(value >> 16);
   dst[3] = (uint8_t)(value >> 24);
+}
+
+static void print_name(const char *name, uint8_t width) {
+  while (width--) {
+    putchar(*name ? *name++ : ' ');
+  }
 }
 
 /* Draw one code frame and hold it still; B aborts the transmission.
@@ -162,7 +169,11 @@ static void crc_prepass(void) {
   uint32_t crc = 0xFFFFFFFFUL;
   uint32_t total = 0;
   text_mode();
-  printf("CRC %s\n\nOPENING...", entry.fname);
+  printf("CRC ");
+  print_name(entry.lfname, 16);
+  gotoxy(0, 1);
+  if (strlen(entry.lfname) > 16)
+    print_name(entry.lfname + 16, 20);
   for (;;) {
     uint16_t got = 0;
     FRESULT result = pf_read(block, PAYLOAD_BYTES, &got);
@@ -199,6 +210,29 @@ static uint8_t browser_key(void) {
 }
 
 static void load_page(void) {
+  const char *leaf;
+  uint16_t split = strlen(browser_path);
+  strcpy(directory_title, "/");
+  if (split) {
+    strcpy(path, browser_path);
+    while (split && path[split - 1] != '/')
+      split--;
+    leaf = browser_path + split;
+    path[split ? split - 1 : 0] = 0;
+    if (pf_opendir(&directory, path) != FR_OK)
+      fail_msg("DIRECTORY", "PARENT UNREADABLE");
+    for (;;) {
+      FRESULT title_result = pf_readdir(&directory, &entry);
+      if (title_result != FR_OK)
+        fail("DIRECTORY", title_result);
+      if (!entry.fname[0])
+        fail_msg("DIRECTORY", "NAME NOT FOUND");
+      if (!strcmp(entry.fname, leaf)) {
+        strcpy(directory_title, entry.lfname);
+        break;
+      }
+    }
+  }
   FRESULT result = pf_opendir(&directory, browser_path);
   uint16_t index = 0;
   if (result != FR_OK)
@@ -226,18 +260,15 @@ static void load_page(void) {
 
 static void draw_browser(void) {
   uint8_t i;
-  uint16_t length = strlen(browser_path);
   cls();
   printf("SD FILES  PAGE %u\n", page_start / 10 + 1);
-  if (length)
-    printf("%s", browser_path + (length > 20 ? length - 20 : 0));
-  else
-    printf("/");
+  print_name(directory_title, 20);
   for (i = 0; i < page_count; i++) {
     gotoxy(0, i + 3);
     putchar(i == selection ? '>' : ' ');
     putchar(page_entries[i].fattrib & AM_DIR ? '+' : ' ');
-    printf(" %s", page_entries[i].fname);
+    putchar(' ');
+    print_name(page_entries[i].lfname, 17);
   }
   if (!page_count) {
     gotoxy(0, 3);
@@ -245,6 +276,25 @@ static void draw_browser(void) {
   }
   gotoxy(0, 14);
   printf("UP/DOWN: SELECT\nLEFT/RIGHT: PAGE\nA: OPEN/SEND B: UP");
+}
+
+static uint8_t browser_input(void) {
+  uint16_t offset = 0;
+  uint16_t length = page_count ? strlen(page_entries[selection].lfname) : 0;
+  uint8_t last = (uint8_t)sys_time;
+  uint8_t keys;
+  waitpadup();
+  do {
+    vsync();
+    keys = joypad();
+    if (length > 17 && (uint8_t)((uint8_t)sys_time - last) >= 30) {
+      last = (uint8_t)sys_time;
+      offset = offset + 17 >= length ? 0 : offset + 1;
+      gotoxy(3, selection + 3);
+      print_name(page_entries[selection].lfname + offset, 17);
+    }
+  } while (!keys);
+  return keys;
 }
 
 static void browser_notice(const char *message) {
@@ -295,7 +345,8 @@ void main(void) {
   FRESULT result;
   if (_cpu == CGB_TYPE)
     set_default_palette();
-  printf("X7 VISUAL SENDER\n\nSD FILE BROWSER\nSD V2 / FAT32\n8.3 FILE NAMES\n"
+  printf("X7 VISUAL SENDER\n\nSD FILE BROWSER\nSD V2 / FAT32\nREADABLE FILE "
+         "NAMES\n"
          "NO SD DATA WRITES\n\nSTART: MOUNT SD\nPOWER OFF: EXIT");
   wait_button(J_START);
   cls();
@@ -307,7 +358,7 @@ void main(void) {
   for (;;) {
     uint8_t keys;
     draw_browser();
-    keys = browser_key();
+    keys = browser_input();
     if (keys & J_B) {
       uint16_t length = strlen(browser_path);
       while (length && browser_path[length - 1] != '/')

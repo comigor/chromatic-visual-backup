@@ -9,6 +9,7 @@
   "changes": [
     "GBDK ROM bank 1; portable header for host verification; configuration excludes writes",
     "Specialized constant FAT32 and CP437 branches to remove compiler unreachable-code warnings; other configurations rejected",
+    "Added bounded display-only VFAT long-name assembly with ordinal/checksum validation and short-name fallback; path lookup remains short-name-only",
     "src/x7_disk.c is derived from src/gb/everdrivex/diskio.c and its SPI helpers: added timeouts, command allowlist, SDv2-only initialization, cache correctness and error cleanup"
   ]
 }

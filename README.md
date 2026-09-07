@@ -16,7 +16,7 @@ A Game Boy ROM reads a selected file and displays a repeating black-and-white da
 
 - ModRetro Chromatic with its standard USB video firmware.
 - EverDrive GB X-series cartridge. Development and hardware confirmation have used an X7; other models are not independently verified.
-- SDv2 card formatted FAT32. The browser uses FAT **8.3 short names**, such as `TETR~001.SAV`, not long filenames.
+- SDv2 card formatted FAT32. The browser displays validated FAT long filenames while using **8.3 short aliases** internally for access.
 - Android 7.0+ device with USB host support and a data-capable USB-C connection. The APK contains arm64-v8a and x86_64 native libraries.
 
 ## Use
@@ -30,6 +30,7 @@ A Game Boy ROM reads a selected file and displays a repeating black-and-white da
    - **A:** enter a directory or calculate a selected file's CRC.
    - **B:** parent directory; at the root, remain at the root.
    - `+` marks a directory. Hidden/system entries may also be listed.
+   - Selected names longer than the row scroll automatically. The current folder and CRC screen also use readable names. No card entries are renamed or removed.
 5. Connect the Chromatic directly to the phone. Close other apps using its USB video interface. Tap **Receive stock USB video** and grant permissions. Android requires camera permission to open a USB video device; this app does not capture from the phone's camera.
 6. At the ROM's CRC screen, press **A** to broadcast. The complete sequence repeats. **B** returns to the browser.
 7. Wait for **CRC VERIFIED** in the app. Stop the ROM manually, then tap **Save verified file**. The app reads the destination back and checks its length and CRC again.
@@ -45,6 +46,7 @@ For a first connection check, `build/visual-demo.gb` broadcasts a deterministic 
 - The X7 reader does write control registers to unlock/select its SD interface and issue read commands. This is not a claim of zero cartridge-bus writes.
 - The app uses standard video negotiation and capture. It does not select the experimental CDC mailbox, toggle DTR/RTS, load firmware, or issue cartridge commands.
 - Maximum exported file: **16 MiB**. Directory paths: **255 bytes** in short-name form. Oversized selections/path entries report a message rather than silently truncate.
+- Long names support up to 255 UTF-16 code units. The ROM font displays ASCII; unsupported characters appear as `?`. Invalid/mismatched long-name records fall back to the short alias. The unchanged video protocol and Android export name still use the short alias, so no APK update is required for readable ROM browsing.
 - CRC32 is accidental-corruption detection, not authentication, encryption, or a collision-proof guarantee. The source CRC is computed afresh before each selected-file transfer. Anyone who captures the video can decode its contents.
 - Missing frames are recovered through repetition. No completion or throughput guarantee: missing blocks, conflicting duplicates, wrong length, or CRC mismatch prevent acceptance.
 

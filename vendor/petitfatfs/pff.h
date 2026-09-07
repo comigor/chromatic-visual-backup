@@ -85,6 +85,7 @@ typedef struct {
     uint16_t    ftime;      /* Last modified time */
     uint8_t fattrib;    /* Attribute */
     char    fname[13];  /* File name */
+    char    lfname[256];
 } FILINFO;
 
 
