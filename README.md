@@ -2,15 +2,15 @@
 
 Export files from an EverDrive GB X-series microSD card through a ModRetro Chromatic's **stock USB video output**, then reconstruct and CRC-verify them on Android. No custom Chromatic firmware or FPGA compiler is required.
 
-A Game Boy ROM reads a selected file and displays a repeating black-and-white data grid. The Android app captures the normal UVC video stream, assembles numbered blocks, and verifies the received file against a source CRC32 sent through that same video stream.
+A Game Boy Color ROM reads a selected file and displays a repeating four-color data grid. The Android app captures the normal UVC video stream, assembles numbered blocks, and verifies the received file against a source CRC32 sent through that same video stream.
 
 ## Status
 
 - The original demo transfer has been confirmed working on physical Chromatic/Android hardware by the project owner.
-- Current ROMs include an SD-card directory browser and faster rendering/CRC calculation. The current demo measures 12.5 distinct frames/s in PyBoy at normal CGB CPU speed, versus a target cap of about 15 frames/s. Physical SD reads can lower the rate.
+- Current ROMs use four colors (white, black, red, cyan), carrying **264 file bytes per frame**, versus 120 in monochrome. The 1,021-byte demo repeats in 33 emulated video frames versus 48 previously: about **1.45× faster** at normal CGB CPU speed. Its pattern rate is about 9.1 frames/s. These are emulator measurements, not physical SD throughput guarantees.
 - The updated directory browser was exercised using the compiled ROM and a local FAT32 replay image: root paging, nested folders, selected-file checksum, transmission, cancel and parent navigation.
 - Android includes a dark theme and system-bar/display-cutout insets.
-- The updated ROM/app combination still needs hardware confirmation. CRC verification detects transfer corruption; it does not establish that a source save was valid before export.
+- Color ROM video was decoded with the actual Java receiver after simulated RGB-to-YUY2 conversion/chroma sharing, with exact demo bytes and file CRC matching. Actual Chromatic color conversion/capture still needs hardware confirmation. CRC verification detects transfer corruption; it does not establish that a source save was valid before export.
 
 ## Requirements
 
@@ -18,6 +18,7 @@ A Game Boy ROM reads a selected file and displays a repeating black-and-white da
 - EverDrive GB X-series cartridge. Development and hardware confirmation have used an X7; other models are not independently verified.
 - SDv2 card formatted FAT32. The browser displays validated FAT long filenames while using **8.3 short aliases** internally for access.
 - Android 7.0+ device with USB host support and a data-capable USB-C connection. The APK contains arm64-v8a and x86_64 native libraries.
+- **Install APK 3.0 together with the color ROMs.** The new receiver also accepts old X7V1 monochrome ROMs; old APKs cannot receive X7V2 color frames. New ROMs require Game Boy Color mode.
 
 ## Use
 
@@ -46,7 +47,7 @@ For a first connection check, `build/visual-demo.gb` broadcasts a deterministic 
 - The X7 reader does write control registers to unlock/select its SD interface and issue read commands. This is not a claim of zero cartridge-bus writes.
 - The app uses standard video negotiation and capture. It does not select the experimental CDC mailbox, toggle DTR/RTS, load firmware, or issue cartridge commands.
 - Maximum exported file: **16 MiB**. Directory paths: **255 bytes** in short-name form. Oversized selections/path entries report a message rather than silently truncate.
-- Long names support up to 255 UTF-16 code units. The ROM font displays ASCII; unsupported characters appear as `?`. Invalid/mismatched long-name records fall back to the short alias. The unchanged video protocol and Android export name still use the short alias, so no APK update is required for readable ROM browsing.
+- Long names support up to 255 UTF-16 code units. The ROM font displays ASCII; unsupported characters appear as `?`. Invalid/mismatched long-name records fall back to the short alias. The video manifest and Android export name still use the short alias.
 - CRC32 is accidental-corruption detection, not authentication, encryption, or a collision-proof guarantee. The source CRC is computed afresh before each selected-file transfer. Anyone who captures the video can decode its contents.
 - Missing frames are recovered through repetition. No completion or throughput guarantee: missing blocks, conflicting duplicates, wrong length, or CRC mismatch prevent acceptance.
 
@@ -102,7 +103,9 @@ No command above flashes the Chromatic. Install commands address the currently s
 - `android/native/uvc_capture.c` — Linux usbdevfs isochronous UVC/YUY2 capture through Android's permission-granted descriptor.
 - [`visual-protocol.json`](visual-protocol.json) — wire layout and receiver rules.
 
-The screen has 40×36 cells. A 36×32 inner rectangle carries a 144-byte frame: 20 header bytes, 120 payload bytes, and a 4-byte frame CRC. The manifest carries filename, length, and the source file CRC. Data frames identify their file by size plus CRC, assuming a single selected file is broadcasting. They are not collision-resistant session identifiers.
+The screen has 40×36 cells, each 4×4 pixels. A 36×32 inner rectangle carries 288 bytes using two bits per cell: 20 header bytes, 264 payload bytes, and a 4-byte frame CRC. Payload length is a 16-bit little-endian field. The outer border carries known samples of all four colors; the receiver calibrates YUV color centers for each frame and rejects ambiguous colors, wrong markers and CRC failures. The 256 possible four-cell patterns are preloaded as 4 KiB of tile graphics. YUY2 chroma is shared horizontally, so the even-width aligned cells are sampled away from edges.
+
+The manifest carries filename, length, and source file CRC. Data frames identify their file by protocol version, size and CRC, assuming one selected file broadcasts at a time. They are not collision-resistant session identifiers. Legacy X7V1 decoding retains its 144-byte frame/120-byte payload and cannot mix blocks with X7V2 in one transfer.
 
 ## Third-party notices
 

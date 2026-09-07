@@ -135,7 +135,7 @@ def main():
          "--java", gen,
          "--min-sdk-version", str(MIN_SDK),
          "--target-sdk-version", str(TARGET_SDK),
-         "--version-code", "3", "--version-name", "2.1",
+         "--version-code", "4", "--version-name", "3.0",
          res_zip])
 
     # 3. Compile Java sources (app + generated R) against android.jar.
